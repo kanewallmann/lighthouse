@@ -16,9 +16,9 @@ use std::time::Instant;
 use types::EthSpec;
 
 /// Max number of disconnected nodes to remember.
-const MAX_DC_PEERS: usize = 500;
+const MAX_DC_PEERS: usize = 20;
 /// The maximum number of banned nodes to remember.
-const MAX_BANNED_PEERS: usize = 1000;
+const MAX_BANNED_PEERS: usize = 20;
 /// We ban an IP if there are more than `BANNED_PEERS_PER_IP_THRESHOLD` banned peers with this IP.
 const BANNED_PEERS_PER_IP_THRESHOLD: usize = 5;
 
@@ -391,6 +391,7 @@ impl<TSpec: EthSpec> PeerDB<TSpec> {
 
         if info.is_disconnected() {
             self.disconnected_peers = self.disconnected_peers.saturating_sub(1);
+            debug!(self.log, "Reducing disconnected peer because dialing"; "var" => self.disconnected_peers);
         }
 
         if info.is_banned() {
@@ -400,6 +401,9 @@ impl<TSpec: EthSpec> PeerDB<TSpec> {
 
         if let Err(e) = info.dialing_peer() {
             error!(self.log, "{}", e; "peer_id" => %peer_id);
+        }
+        if self.disconnected_peers != self.disconnected_peers().count() {
+            crit!(self.log, "Disconnected peer mismatch"; "var" => self.disconnected_peers, "actual" => self.disconnected_peers().count());
         }
     }
 
@@ -451,6 +455,7 @@ impl<TSpec: EthSpec> PeerDB<TSpec> {
 
         if info.is_disconnected() {
             self.disconnected_peers = self.disconnected_peers.saturating_sub(1);
+            debug!(self.log, "Adding disconnected peer because connected"; "var" => self.disconnected_peers);
         }
 
         if info.is_banned() {
@@ -481,6 +486,9 @@ impl<TSpec: EthSpec> PeerDB<TSpec> {
             ConnectionDirection::Incoming => info.connect_ingoing(socket_addr),
             ConnectionDirection::Outgoing => info.connect_outgoing(socket_addr),
         }
+        if self.disconnected_peers != self.disconnected_peers().count() {
+            crit!(self.log, "Disconnected peer mismatch"; "var" => self.disconnected_peers, "actual" => self.disconnected_peers().count());
+        }
     }
     /// Sets a peer as connected with an ingoing connection.
     pub fn connect_ingoing(&mut self, peer_id: &PeerId, multiaddr: Multiaddr, enr: Option<Enr>) {
@@ -503,11 +511,20 @@ impl<TSpec: EthSpec> PeerDB<TSpec> {
                 PeerConnectionStatus::Disconnected { .. } | PeerConnectionStatus::Banned { .. }
             ) {
                 self.disconnected_peers += 1;
+                debug!(self.log, "Increasing disconnected peer because disconnected"; "var" => self.disconnected_peers);
             }
             let result = info.notify_disconnect().unwrap_or(false);
             self.shrink_to_fit();
+
+            if self.disconnected_peers != self.disconnected_peers().count() {
+                crit!(self.log, "Disconnected peer mismatch"; "var" => self.disconnected_peers, "actual" => self.disconnected_peers().count());
+            }
             result
         } else {
+            if self.disconnected_peers != self.disconnected_peers().count() {
+                crit!(self.log, "Disconnected peer mismatch"; "var" => self.disconnected_peers, "actual" => self.disconnected_peers().count());
+            }
+
             false
         }
     }
@@ -549,10 +566,18 @@ impl<TSpec: EthSpec> PeerDB<TSpec> {
                 // It is possible to ban a peer that has a disconnected score, if there are many
                 // events that score it poorly and are processed after it has disconnected.
                 self.disconnected_peers = self.disconnected_peers.saturating_sub(1);
+
+                debug!(self.log, "Increasing disconnected peer because disconnecting and banning"; "var" => self.disconnected_peers);
+
                 info.update_state();
+
                 self.banned_peers_count
                     .add_banned_peer(info.seen_addresses());
                 self.shrink_to_fit();
+
+                if self.disconnected_peers != self.disconnected_peers().count() {
+                    crit!(self.log, "Disconnected peer mismatch"; "var" => self.disconnected_peers, "actual" => self.disconnected_peers().count());
+                }
                 BanOperation::ReadyToBan
             }
             PeerConnectionStatus::Disconnecting { .. } => {
@@ -610,7 +635,14 @@ impl<TSpec: EthSpec> PeerDB<TSpec> {
 
         // This transitions a banned peer to a disconnected peer
         self.disconnected_peers = self.disconnected_peers.saturating_add(1);
+        debug!(self.log, "Reducing disconnected peer because unban"; "var" => self.disconnected_peers);
+        if self.disconnected_peers != self.disconnected_peers().count() {
+            crit!(self.log, "Disconnected peer before mismatch"; "var" => self.disconnected_peers, "actual" => self.disconnected_peers().count());
+        }
         self.shrink_to_fit();
+        if self.disconnected_peers != self.disconnected_peers().count() {
+            crit!(self.log, "Disconnected peer before mismatch"; "var" => self.disconnected_peers, "actual" => self.disconnected_peers().count());
+        }
         Ok(())
     }
 
