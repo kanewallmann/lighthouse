@@ -10,6 +10,9 @@ use std::fmt;
 use std::str::{from_utf8, FromStr};
 pub use types::*;
 
+#[cfg(feature = "lighthouse")]
+use crate::lighthouse::BlockReward;
+
 /// An API error serializable to JSON.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -771,6 +774,8 @@ pub enum EventKind<T: EthSpec> {
     VoluntaryExit(SignedVoluntaryExit),
     ChainReorg(SseChainReorg),
     ContributionAndProof(Box<SignedContributionAndProof<T>>),
+    #[cfg(feature = "lighthouse")]
+    BlockReward(BlockReward),
 }
 
 impl<T: EthSpec> EventKind<T> {
@@ -783,6 +788,8 @@ impl<T: EthSpec> EventKind<T> {
             EventKind::FinalizedCheckpoint(_) => "finalized_checkpoint",
             EventKind::ChainReorg(_) => "chain_reorg",
             EventKind::ContributionAndProof(_) => "contribution_and_proof",
+            #[cfg(feature = "lighthouse")]
+            EventKind::BlockReward(_) => "block_reward",
         }
     }
 
@@ -832,6 +839,10 @@ impl<T: EthSpec> EventKind<T> {
                     ServerError::InvalidServerSentEvent(format!("Contribution and Proof: {:?}", e))
                 })?,
             ))),
+            #[cfg(feature = "lighthouse")]
+            "block_reward" => Ok(EventKind::BlockReward(serde_json::from_str(data).map_err(
+                |e| ServerError::InvalidServerSentEvent(format!("Block Reward: {:?}", e)),
+            )?)),
             _ => Err(ServerError::InvalidServerSentEvent(
                 "Could not parse event tag".to_string(),
             )),
@@ -854,6 +865,8 @@ pub enum EventTopic {
     FinalizedCheckpoint,
     ChainReorg,
     ContributionAndProof,
+    #[cfg(feature = "lighthouse")]
+    BlockReward,
 }
 
 impl FromStr for EventTopic {
@@ -868,6 +881,8 @@ impl FromStr for EventTopic {
             "finalized_checkpoint" => Ok(EventTopic::FinalizedCheckpoint),
             "chain_reorg" => Ok(EventTopic::ChainReorg),
             "contribution_and_proof" => Ok(EventTopic::ContributionAndProof),
+            #[cfg(feature = "lighthouse")]
+            "block_reward" => Ok(EventTopic::BlockReward),
             _ => Err("event topic cannot be parsed.".to_string()),
         }
     }
@@ -883,6 +898,8 @@ impl fmt::Display for EventTopic {
             EventTopic::FinalizedCheckpoint => write!(f, "finalized_checkpoint"),
             EventTopic::ChainReorg => write!(f, "chain_reorg"),
             EventTopic::ContributionAndProof => write!(f, "contribution_and_proof"),
+            #[cfg(feature = "lighthouse")]
+            EventTopic::BlockReward => write!(f, "block_reward"),
         }
     }
 }

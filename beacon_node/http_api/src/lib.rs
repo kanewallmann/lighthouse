@@ -2485,6 +2485,9 @@ pub fn serve<T: BeaconChainTypes>(
                                 api_types::EventTopic::ContributionAndProof => {
                                     event_handler.subscribe_contributions()
                                 }
+                                api_types::EventTopic::BlockReward => {
+                                    event_handler.subscribe_block_reward()
+                                }
                             };
 
                             receivers.push(BroadcastStream::new(receiver).map(|msg| {

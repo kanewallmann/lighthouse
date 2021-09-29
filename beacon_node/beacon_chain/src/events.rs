@@ -14,6 +14,7 @@ pub struct ServerSentEventHandler<T: EthSpec> {
     exit_tx: Sender<EventKind<T>>,
     chain_reorg_tx: Sender<EventKind<T>>,
     contribution_tx: Sender<EventKind<T>>,
+    block_reward_tx: Sender<EventKind<T>>,
     log: Logger,
 }
 
@@ -30,6 +31,7 @@ impl<T: EthSpec> ServerSentEventHandler<T> {
         let (exit_tx, _) = broadcast::channel(capacity);
         let (chain_reorg_tx, _) = broadcast::channel(capacity);
         let (contribution_tx, _) = broadcast::channel(capacity);
+        let (block_reward_tx, _) = broadcast::channel(capacity);
 
         Self {
             attestation_tx,
@@ -39,6 +41,7 @@ impl<T: EthSpec> ServerSentEventHandler<T> {
             exit_tx,
             chain_reorg_tx,
             contribution_tx,
+            block_reward_tx,
             log,
         }
     }
@@ -61,6 +64,8 @@ impl<T: EthSpec> ServerSentEventHandler<T> {
             EventKind::ChainReorg(reorg) => self.chain_reorg_tx.send(EventKind::ChainReorg(reorg))
                 .map(|count| trace!(self.log, "Registering server-sent chain reorg event"; "receiver_count" => count)),
             EventKind::ContributionAndProof(contribution_and_proof) => self.contribution_tx.send(EventKind::ContributionAndProof(contribution_and_proof))
+                .map(|count| trace!(self.log, "Registering server-sent contribution and proof event"; "receiver_count" => count)),
+            EventKind::BlockReward(block_reward) => self.block_reward_tx.send(EventKind::BlockReward(block_reward))
                 .map(|count| trace!(self.log, "Registering server-sent contribution and proof event"; "receiver_count" => count)),
         };
         if let Err(SendError(event)) = result {
@@ -96,6 +101,10 @@ impl<T: EthSpec> ServerSentEventHandler<T> {
         self.contribution_tx.subscribe()
     }
 
+    pub fn subscribe_block_reward(&self) -> Receiver<EventKind<T>> {
+        self.block_reward_tx.subscribe()
+    }
+
     pub fn has_attestation_subscribers(&self) -> bool {
         self.attestation_tx.receiver_count() > 0
     }
@@ -122,5 +131,9 @@ impl<T: EthSpec> ServerSentEventHandler<T> {
 
     pub fn has_contribution_subscribers(&self) -> bool {
         self.contribution_tx.receiver_count() > 0
+    }
+
+    pub fn has_block_reward_subscribers(&self) -> bool {
+        self.block_reward_tx.receiver_count() > 0
     }
 }
